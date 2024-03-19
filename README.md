@@ -10,3 +10,13 @@ TODO:
 - How to install
 - How to run
 - Usual other stuff
+
+```bash
+julia --project=. -e 'import Pkg; Pkg.instantiate(); import Pluto; Pluto.run()'
+```
+
+or
+
+```bash
+julia --project=. -e 'import Pkg; Pkg.instantiate(); import Pluto; Pluto.run(launch_browser = false)'
+```
