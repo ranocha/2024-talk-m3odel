@@ -26,7 +26,7 @@ Go to https://julialang.org/downloads and download the latest stable version of 
 
 Clone this reproducibility repository by executing
 ```shell
-git clone https://github.com/sloede/talk-2024-dlr-braunschweig-repro.git
+git clone https://github.com/ranocha/2024-talk-m3odel.git
 ```
 
 ### Start Julia and run code
