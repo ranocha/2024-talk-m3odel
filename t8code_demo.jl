@@ -26,10 +26,10 @@ md"""
 This [Pluto.jl](https://github.com/fonsp/Pluto.jl)
 notebook contains the source code for the hands-on introduction to
 adaptive meshes with [T8code.jl](https://github.com/DLR-AMR/T8code.jl)
-given by Hendrik Ranocha at the 
-[M3ODEL Lunch Talk Seminar](https://model.uni-mainz.de/lunch-talks/) 
+given by Hendrik Ranocha at the
+[M3ODEL Lunch Talk Seminar](https://model.uni-mainz.de/lunch-talks/)
 on March 28, 2024.
-You can find the source code in the 
+You can find the source code in the
 [accompanying repository](https://github.com/ranocha/2024-talk-m3odel).
 """
 
@@ -81,7 +81,7 @@ const comm = let
 		# Julia with multiple threads. Otherwise, we get segfaults
 		# since Julia uses signals to control the GC.
 		let catch_signals = 0, print_backtrace = 1, log_handler = C_NULL
-			T8code.Libt8.sc_init(comm, catch_signals, print_backtrace, C_NULL, 
+			T8code.Libt8.sc_init(comm, catch_signals, print_backtrace, C_NULL,
 								 T8code.Libt8.SC_LP_ESSENTIAL)
 			t8_init(T8code.Libt8.SC_LP_PRODUCTION)
 			T8code.Libt8.p4est_init(log_handler, T8code.Libt8.SC_LP_PRODUCTION)
@@ -227,9 +227,9 @@ Return the maximal refinement level of all (local) elements.
 """
 function get_maximum_level(forest)
 	@T8_ASSERT t8_forest_is_committed(forest) == 1
-	
+
 	max_level = typemin(Cint)
-	
+
 	# Loop over all trees
 	num_local_trees = t8_forest_get_num_local_trees(forest)
     for itree in 0:(num_local_trees - 1)
@@ -265,7 +265,7 @@ Return data with the following fields
 """
 function get_element_data(forest)
 	@T8_ASSERT t8_forest_is_committed(forest) == 1
-	
+
 	# Simple code works only for quads
 	num_local_trees = t8_forest_get_num_local_trees(forest)
 	for itree in 0:(num_local_trees - 1)
@@ -274,7 +274,7 @@ function get_element_data(forest)
 	end
 	ndims = 2
 	num_faces = 2^ndims
-	
+
     num_local_elements = t8_forest_get_local_num_elements(forest)
 	# Coordinates of the edges
     x_edge = Vector{NTuple{num_faces, SVector{ndims, Float64}}}(undef, num_local_elements)
@@ -306,25 +306,25 @@ function get_element_data(forest)
             element_level_local = t8_element_level(eclass_scheme, element)
 
             # Retrieve centroid coordinates of elements (in normalized manner)
-            t8_forest_element_centroid(forest, itree, element, 
+            t8_forest_element_centroid(forest, itree, element,
 									   pointer(element_coords_ll))
 			x_cell[current_index] = SVector(element_coords_ll[1],
 											element_coords_ll[2])
 
             # Retrieve coordinates of vertices
-            t8_forest_element_coordinate(forest, itree, element, 0, 
+            t8_forest_element_coordinate(forest, itree, element, 0,
 										 pointer(element_coords_ll))
-            t8_forest_element_coordinate(forest, itree, element, 1, 
+            t8_forest_element_coordinate(forest, itree, element, 1,
 										 pointer(element_coords_lr))
-			t8_forest_element_coordinate(forest, itree, element, 2, 
+			t8_forest_element_coordinate(forest, itree, element, 2,
 										 pointer(element_coords_ul))
-			t8_forest_element_coordinate(forest, itree, element, 3, 
+			t8_forest_element_coordinate(forest, itree, element, 3,
 										 pointer(element_coords_ur))
-			x_edge[current_index] = (SVector(element_coords_ll[1], 
+			x_edge[current_index] = (SVector(element_coords_ll[1],
 											 element_coords_ll[2]),
 									 SVector(element_coords_lr[1],
 										     element_coords_lr[2]),
-									 SVector(element_coords_ul[1], 
+									 SVector(element_coords_ul[1],
 											 element_coords_ul[2]),
 									 SVector(element_coords_ur[1],
 										     element_coords_ur[2]))
@@ -351,7 +351,7 @@ let data = get_element_data(forest)
 	# but p4est/t8code sort along the trees (Z order for p4est)
 	idx = sortperm(data.x_cell)
 	z = reshape(data.unique_element_id[idx], length(x), length(y))
-	heatmap(x, y, z; 
+	heatmap(x, y, z;
 			aspect_ratio = 1, title = "Unique Element IDs",
 			xguide = L"x", yguide = L"y")
 end
@@ -371,7 +371,7 @@ let data = get_element_data(forest)
 	# but p4est/t8code sort along the trees (Z order for p4est)
 	idx = sortperm(data.x_cell)
 	z = reshape(f.(data.x_cell[idx]), length(x), length(y))
-	heatmap(x, y, z; 
+	heatmap(x, y, z;
 			aspect_ratio = 1, title = L"f(x, y)",
 			xguide = L"x", yguide = L"y")
 
@@ -392,6 +392,51 @@ let data = get_element_data(forest)
 		i += 6
 	end
 	plot!(x_edge, y_edge; color = :gray, label = "")
+end
+
+# ╔═╡ cefe1a1c-260f-4d4c-a801-4b98f01d931a
+# helper function for plot_forest_data
+function adapt_callback_maxlevel(forest, forest_from, which_tree, lelement_id,
+                        	     ts, is_family, num_elements, elements_ptr) :: Cint
+  	adapt_data_ptr = Ptr{Cint}(t8_forest_get_user_data(forest))
+	max_level = unsafe_load(adapt_data_ptr, 1)
+
+	tree_class = t8_forest_get_tree_class(forest_from, which_tree)
+    eclass_scheme = t8_forest_get_eclass_scheme(forest_from, tree_class)
+	element = t8_forest_get_element_in_tree(forest_from, which_tree, lelement_id)
+    element_level_local = t8_element_level(eclass_scheme, element)
+
+	return Cint(element_level_local < max_level)
+end
+
+# ╔═╡ 03fa4a2b-6ec4-40d5-bbb6-bb3c04f4c91a
+# helper function for plot_forest_data
+function replace_callback_copy_cdouble(forest_old, forest_new,
+							           which_tree, ts,
+							           refine, num_outgoing, first_outgoing,
+                                       num_incoming, first_incoming)
+	adapt_data_old = Ptr{Cdouble}(t8_forest_get_user_data(forest_old))
+	adapt_data_new = Ptr{Cdouble}(t8_forest_get_user_data(forest_new))
+
+	first_outgoing += t8_forest_get_tree_element_offset(forest_old, which_tree)
+	first_incoming += t8_forest_get_tree_element_offset(forest_new, which_tree)
+
+	# Copy values if the element is refined or stays as it is
+	if refine == 0
+		value = unsafe_load(adapt_data_old, first_outgoing + 1)
+		unsafe_store!(adapt_data_new, value, first_incoming + 1)
+	elseif refine == 1
+		value = unsafe_load(adapt_data_old, first_outgoing + 1)
+		for i in 1:num_incoming
+			unsafe_store!(adapt_data_new, value, first_incoming + i)
+		end
+	else
+		error("Should not happen - not implemented")
+	end
+
+	t8_forest_set_user_data(forest_new, adapt_data_new)
+
+	return nothing
 end
 
 # ╔═╡ 8d201569-c566-41a7-a865-478ffff42119
@@ -416,7 +461,7 @@ function plot_forest_data(forest, values::Vector{Cdouble};
 	# We want to refine all elements to the maximum level of
 	# refinement available in the forest to plot the values
 	max_level = get_maximum_level(forest)
-	
+
 	forest_adapt_1 = let
 		new_forest_ref = Ref(t8_forest_t())
     	t8_forest_init(new_forest_ref)
@@ -427,23 +472,23 @@ function plot_forest_data(forest, values::Vector{Cdouble};
 	t8_forest_ref(forest)
 	t8_forest_set_copy(forest_adapt_1, forest)
 	t8_forest_commit(forest_adapt_1)
-	
+
 	values_1 = values
 	t8_forest_set_user_data(forest_adapt_1, pointer(values_1))
 
 	# Refine until nothing changes anymore
 	while true
 		t8_forest_ref(forest_adapt_1)
-		forest_adapt_2 = t8_forest_new_adapt(forest_adapt_1, 
-								             @t8_adapt_callback(adapt_callback_maxlevel), 
+		forest_adapt_2 = t8_forest_new_adapt(forest_adapt_1,
+								             @t8_adapt_callback(adapt_callback_maxlevel),
 									         0, 0,
 									         Ref(max_level))
 		values_2 = similar(values_1, t8_forest_get_local_num_elements(forest_adapt_2))
 		t8_forest_set_user_data(forest_adapt_2, pointer(values_2))
-	
+
 		t8_forest_iterate_replace(forest_adapt_2, forest_adapt_1,
 								  T8code.@t8_replace_callback(replace_callback_copy_cdouble))
-	
+
 		# TODO: Destroy first adapted forest and just keep the second one
 		#       This segfaults... ?
 		# t8_forest_unref(forest_adapt_1)
@@ -453,14 +498,14 @@ function plot_forest_data(forest, values::Vector{Cdouble};
 			t8_forest_get_local_num_elements(forest_adapt_2)
 			break
 		end
-		
+
 		values_1 = values_2
 		forest_adapt_1 = forest_adapt_2
 	end
 
 	values_uniform = values_1
 	data_uniform = get_element_data(forest_adapt_1)
-	
+
 	# Unique coordinates of the cell centers
 	x = getindex.(data_uniform.x_cell, 1) |> unique |> sort
 	y = getindex.(data_uniform.x_cell, 2) |> unique |> sort
@@ -469,7 +514,7 @@ function plot_forest_data(forest, values::Vector{Cdouble};
 	# but p4est/t8code sort along the trees (Z order for p4est)
 	idx = sortperm(data_uniform.x_cell)
 	z = reshape(values_uniform[idx], length(x), length(y))
-	fig = heatmap(x, y, z; 
+	fig = heatmap(x, y, z;
 				  aspect_ratio = 1, xguide = L"x", yguide = L"y",
 				  kwargs...)
 
@@ -504,60 +549,14 @@ let forest = create_forest(x = (0.0, 15.0), y = (0.0, 10.0), level = 2)
 	# refine elements with +1 and coarsen elements with -1
     refine_elements[1] = 1
 
-    forest_adapt = t8_forest_new_adapt(forest, 
-									   @t8_adapt_callback(simple_adapt_callback), 
-									   0, 0, 
+    forest_adapt = t8_forest_new_adapt(forest,
+									   @t8_adapt_callback(simple_adapt_callback),
+									   0, 0,
 									   pointer(refine_elements))
 
     data = get_element_data(forest_adapt)
-	plot_forest_data(forest_adapt, Cdouble.(data.unique_element_id); 
+	plot_forest_data(forest_adapt, Cdouble.(data.unique_element_id);
 					 data, title = "Unique Element IDs")
-end
-
-# ╔═╡ cefe1a1c-260f-4d4c-a801-4b98f01d931a
-# helper function for plot_forest_data
-function adapt_callback_maxlevel(forest, forest_from, which_tree, lelement_id,
-                        	     ts, is_family, num_elements, elements_ptr) :: Cint
-  	adapt_data_ptr = Ptr{Cint}(t8_forest_get_user_data(forest))
-	max_level = unsafe_load(adapt_data_ptr, 1)
-
-	tree_class = t8_forest_get_tree_class(forest_from, which_tree)
-    eclass_scheme = t8_forest_get_eclass_scheme(forest_from, tree_class)
-	element = t8_forest_get_element_in_tree(forest_from, which_tree, lelement_id)
-    element_level_local = t8_element_level(eclass_scheme, element)
-	#@info "adapt_callback_maxlevel" max_level element_level_local lelement_id
-
-	return Cint(element_level_local < max_level)
-end
-
-# ╔═╡ 03fa4a2b-6ec4-40d5-bbb6-bb3c04f4c91a
-# helper function for plot_forest_data
-function replace_callback_copy_cdouble(forest_old, forest_new,
-							           which_tree, ts, 
-							           refine, num_outgoing, first_outgoing,
-                                       num_incoming, first_incoming)
-	adapt_data_old = Ptr{Cdouble}(t8_forest_get_user_data(forest_old))
-	adapt_data_new = Ptr{Cdouble}(t8_forest_get_user_data(forest_new))
-
-	first_outgoing += t8_forest_get_tree_element_offset(forest_old, which_tree)
-	first_incoming += t8_forest_get_tree_element_offset(forest_new, which_tree)
-
-	# Copy values if the element is refined or stays as it is
-	if refine == 0
-		value = unsafe_load(adapt_data_old, first_outgoing + 1)
-		unsafe_store!(adapt_data_new, value, first_incoming + 1)
-	elseif refine == 1
-		value = unsafe_load(adapt_data_old, first_outgoing + 1)
-		for i in 1:num_incoming
-			unsafe_store!(adapt_data_new, value, first_incoming + i)
-		end
-	else
-		error("Should not happen - not implemented")
-	end
-
-	t8_forest_set_user_data(forest_new, adapt_data_new)
-
-	return nothing
 end
 
 # ╔═╡ ece464f1-2ba1-4239-ad8a-0c61f46b59e0
@@ -576,9 +575,9 @@ let forest = create_forest(x = (0.0, 15.0), y = (0.0, 10.0), level = 1)
 	# refine elements with +1 and coarsen elements with -1
     refine_elements[1] = 1
 
-    forest = t8_forest_new_adapt(forest, 
-							     @t8_adapt_callback(simple_adapt_callback), 
-								 0, 0, 
+    forest = t8_forest_new_adapt(forest,
+							     @t8_adapt_callback(simple_adapt_callback),
+								 0, 0,
 								 pointer(refine_elements))
 	t8_forest_is_committed(forest)
 
@@ -588,7 +587,7 @@ let forest = create_forest(x = (0.0, 15.0), y = (0.0, 10.0), level = 1)
 	# We want to refine all elements to the maximum level of
 	# refinement available in the forest to plot the values
 	max_level = get_maximum_level(forest)
-	
+
 	forest_adapt_1 = let
 		new_forest_ref = Ref(t8_forest_t())
     	t8_forest_init(new_forest_ref)
@@ -600,26 +599,26 @@ let forest = create_forest(x = (0.0, 15.0), y = (0.0, 10.0), level = 1)
 	t8_forest_set_copy(forest_adapt_1, forest)
 	t8_forest_commit(forest_adapt_1)
 	@info "created copy" t8_forest_is_committed(forest) t8_forest_is_committed(forest_adapt_1) t8_forest_get_local_num_elements(forest) t8_forest_get_local_num_elements(forest_adapt_1)
-	
+
 	values_1 = values
 	t8_forest_set_user_data(forest_adapt_1, pointer(values_1))
 
 	# Refine until nothing changes anymore
 	while true
 		t8_forest_ref(forest_adapt_1)
-		forest_adapt_2 = t8_forest_new_adapt(forest_adapt_1, 
-								             @t8_adapt_callback(adapt_callback_maxlevel), 
+		forest_adapt_2 = t8_forest_new_adapt(forest_adapt_1,
+								             @t8_adapt_callback(adapt_callback_maxlevel),
 									         0, 0,
 									         Ref(max_level))
 		values_2 = similar(values_1, t8_forest_get_local_num_elements(forest_adapt_2))
 		t8_forest_set_user_data(forest_adapt_2, pointer(values_2))
-		
+
 		@info "refined" t8_forest_is_committed(forest) t8_forest_is_committed(forest_adapt_1) t8_forest_is_committed(forest_adapt_2) t8_forest_get_local_num_elements(forest) t8_forest_get_local_num_elements(forest_adapt_1) t8_forest_get_local_num_elements(forest_adapt_2)
-	
+
 		t8_forest_iterate_replace(forest_adapt_2, forest_adapt_1,
 								  T8code.@t8_replace_callback(replace_callback_copy_cdouble))
 		@info "iterate_replace" values_1 values_2 forest_adapt_2 forest_adapt_1
-	
+
 		# Destroy first adapted forest and just keep the second one
 		# t8_forest_unref(forest_adapt_1)
 		# t8_forest_unref(forest_adapt_2) ?
@@ -629,7 +628,7 @@ let forest = create_forest(x = (0.0, 15.0), y = (0.0, 10.0), level = 1)
 			t8_forest_get_local_num_elements(forest_adapt_2)
 			break
 		end
-		
+
 		values_1 = values_2
 		forest_adapt_1 = forest_adapt_2
 	end
@@ -1848,9 +1847,9 @@ version = "1.4.1+1"
 # ╠═c032c9d9-f8eb-4a23-93fc-6b3adcec6a92
 # ╠═bff11b44-6401-42bd-875b-81eb76456061
 # ╠═1219fd2e-04a7-4c6b-99f4-c0a184e49d1a
-# ╠═8d201569-c566-41a7-a865-478ffff42119
 # ╠═cefe1a1c-260f-4d4c-a801-4b98f01d931a
 # ╠═03fa4a2b-6ec4-40d5-bbb6-bb3c04f4c91a
+# ╠═8d201569-c566-41a7-a865-478ffff42119
 # ╟─ece464f1-2ba1-4239-ad8a-0c61f46b59e0
 # ╠═11b58f1a-0ff2-40cb-a9fb-b8d166499aa3
 # ╟─00000000-0000-0000-0000-000000000001
