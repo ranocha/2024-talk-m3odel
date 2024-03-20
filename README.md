@@ -8,6 +8,9 @@ given by Hendrik Ranocha at the
 [M3ODEL Lunch Talk Seminar](https://model.uni-mainz.de/lunch-talks/)
 on March 28, 2024.
 
+You can also preview a
+[static version of the demo](https://ranocha.de/2024-talk-m3odel/t8code_demo.html).
+
 
 ## Reproducibility
 
